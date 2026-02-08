@@ -9,6 +9,7 @@ from app.models import Client
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
+# Body de la petición para registrar un cliente nuevo
 class RegisterClient(BaseModel):
     email: EmailStr
     password: str
@@ -16,18 +17,21 @@ class RegisterClient(BaseModel):
     phone: PhoneNumber
 
 
+# Body de la petición para login de cliente
 class LoginClient(BaseModel):
     email: EmailStr
     password: str
 
 @router.post("/register")
 def register(client: RegisterClient, db: Session = Depends(get_db)):
+    # Verifica si ya existe un cliente con el mismo email
     existing = db.exec(
         select(Client).where(Client.email == client.email)
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    # Hash de la contraseña usando bcrypt
     password_bytes = client.password.encode("utf-8")
     salt = bcrypt.gensalt()
     password_hash = bcrypt.hashpw(password_bytes, salt).decode("utf-8")
@@ -52,12 +56,14 @@ def register(client: RegisterClient, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(data: LoginClient, db: Session = Depends(get_db)):
+    # Verifica si el cliente existe
     client = db.exec(
         select(Client).where(Client.email == data.email)
     ).first()
     if not client:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    # Verifica si la contraseña es correcta
     password_bytes = data.password.encode("utf-8")
     if not bcrypt.checkpw(password_bytes, client.password_hash.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid credentials")

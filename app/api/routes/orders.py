@@ -17,6 +17,7 @@ from app.models import (
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
+# Estos dos schemas son necesarios para la relación de Orders con OrderDetails
 class OrderDetailCreate(BaseModel):
     product_id: int
     variant_name: str
@@ -33,6 +34,7 @@ class OrderDetailPublic(BaseModel):
     subtotal: Decimal
 
 
+# Body de las peticiones para crear y actualizar órdenes
 class OrderCreate(BaseModel):
     client_id: uuid.UUID | None = None
     client_name: str
@@ -47,7 +49,7 @@ class OrderUpdate(BaseModel):
     payment_status: PaymentStatus | None = None
     notes: str | None = None
 
-
+# Body de la peticion para listar y obtener las órdenes
 class OrderPublic(BaseModel):
     id: int
     ticket_number: str
@@ -62,7 +64,7 @@ class OrderPublic(BaseModel):
     total: Decimal
     details: list[OrderDetailPublic] = []
 
-
+# Genera el número de ticket basado en el último ID de órden en la base de datos
 def _generate_ticket(db: Session) -> str:
     last = db.exec(select(Order).order_by(Order.id.desc())).first()
     next_num = (last.id + 1) if last else 1
@@ -74,9 +76,12 @@ def list_orders(
     payment_status: PaymentStatus | None = None,
     db: Session = Depends(get_db),
 ):
+    # Busqueda y ordenamiento por id
     query = select(Order).order_by(Order.id.desc())
+    # Si el estado de la órden fue proporcionado solo se traen las órdenes con ese estado
     if status is not None:
         query = query.where(Order.status == status)
+    # Si el estado del pago fue proporcionado solo se traen las órdenes con ese estado de pago
     if payment_status is not None:
         query = query.where(Order.payment_status == payment_status)
     orders = db.exec(query).all()
@@ -86,6 +91,7 @@ def list_orders(
 @router.get("/{order_id}", response_model=OrderPublic)
 def get_order(order_id: int, db: Session = Depends(get_db)):
     order = db.get(Order, order_id)
+    # Si no se encuentra la órden se devuelve un error 404
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
@@ -93,11 +99,13 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=OrderPublic, status_code=201)
 def create_order(data: OrderCreate, db: Session = Depends(get_db)):
+    # Debe de tener al menos un detalle
     if not data.details:
         raise HTTPException(
             status_code=400, detail="Order must have at least one detail"
         )
 
+    # Verifica que todos los productos existan
     product_ids = {d.product_id for d in data.details}
     for pid in product_ids:
         product = db.get(Product, pid)
@@ -110,6 +118,7 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
                 status_code=400, detail=f"Product {pid} is not active"
             )
 
+    # Genera numero de ticket
     ticket = _generate_ticket(db)
 
     order = Order(
@@ -125,6 +134,8 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
     db.add(order)
     db.flush()
 
+    # Flush permite obtener el ID de la órden sin hacer commit todavía,
+    # lo cual es necesario para crear los detalles de la órden con el order_id correcto
     for d in data.details:
         detail = OrderDetail(
             order_id=order.id,
@@ -136,6 +147,7 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
         )
         db.add(detail)
 
+    # Una vez completado lo anterior ahora si puede completar la query
     db.commit()
     db.refresh(order)
     return order
@@ -145,6 +157,7 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
 def update_order(
     order_id: int, data: OrderUpdate, db: Session = Depends(get_db)
 ):
+    # Busca si la órden existe
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -159,6 +172,7 @@ def update_order(
 
 @router.delete("/{order_id}", status_code=204)
 def delete_order(order_id: int, db: Session = Depends(get_db)):
+    # Busca si la órden existe
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")

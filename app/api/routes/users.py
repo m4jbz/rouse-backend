@@ -8,6 +8,7 @@ from app.models import Role, User
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+# Body de la petición para registrar un usuario nuevo
 class RegisterUser(BaseModel):
     email: EmailStr
     password: str
@@ -15,6 +16,7 @@ class RegisterUser(BaseModel):
     role: Role
 
 
+# Body de la petición para login de usuario
 class LoginUser(BaseModel):
     email: EmailStr
     password: str
@@ -22,10 +24,12 @@ class LoginUser(BaseModel):
 
 @router.post("/register")
 def register(user: RegisterUser, db: Session = Depends(get_db)):
+    # Verifica si ya existe un usuario con el mismo email
     existing = db.exec(select(User).where(User.email == user.email)).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    # Hash de la contraseña usando bcrypt
     password_bytes = user.password.encode("utf-8")
     salt = bcrypt.gensalt()
     password_hash = bcrypt.hashpw(password_bytes, salt).decode("utf-8")
@@ -41,15 +45,21 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    return {"id": new_user.id, "email": new_user.email, "name": new_user.name}
+    return {
+        "id": new_user.id,
+        "email": new_user.email,
+        "name": new_user.name
+    }
 
 
 @router.post("/login")
 def login(data: LoginUser, db: Session = Depends(get_db)):
+    # Verifica si el usuario existe
     user = db.exec(select(User).where(User.email == data.email)).first()
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    # Verifica si la contraseña es correcta
     password_bytes = data.password.encode("utf-8")
     if not bcrypt.checkpw(password_bytes, user.password_hash.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
