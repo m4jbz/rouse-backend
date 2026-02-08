@@ -1,23 +1,23 @@
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
 
 from app.core.db import get_db
-from app.models import User, Role
+from app.models import Role, User
 
-import bcrypt
-
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/users", tags=["users"])
 
 class RegisterUser(BaseModel):
     email: EmailStr
     password: str
     name: str
-    role: str
+    role: Role
+
 
 class LoginUser(BaseModel):
     email: EmailStr
-    password_hash: str
+    password: str
 
 
 @router.post("/register")
@@ -30,13 +30,12 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
     salt = bcrypt.gensalt()
     password_hash = bcrypt.hashpw(password_bytes, salt).decode("utf-8")
 
-
     new_user = User(
         email=user.email,
         name=user.name,
         password_hash=password_hash,
         is_active=True,
-        role=Role(user.role),
+        role=user.role,
     )
     db.add(new_user)
     db.commit()
@@ -46,12 +45,12 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-def login(login_user: LoginUser, db: Session = Depends(get_db)):
-    user = db.exec(select(User).where(User.email == login_user.email)).first()
+def login(data: LoginUser, db: Session = Depends(get_db)):
+    user = db.exec(select(User).where(User.email == data.email)).first()
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    password_bytes = login_user.password_hash.encode("utf-8")
+    password_bytes = data.password.encode("utf-8")
     if not bcrypt.checkpw(password_bytes, user.password_hash.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
