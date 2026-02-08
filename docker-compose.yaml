@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:18.1
+    container_name: rouse_db
+    restart: always
+    environment:
+      POSTGRES_USER: rouse
+      POSTGRES_PASSWORD: pass123
+      POSTGRES_DB: main
+    ports:
+      - "5440:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - db_network
+
+  adminer:
+    image: adminer:latest
+    container_name: rouse_adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    networks:
+      - db_network
+    depends_on:
+      - postgres
+
+networks:
+  db_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
