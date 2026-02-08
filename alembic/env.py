@@ -4,22 +4,18 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
-# Importar los modelos de SQLModel para que Alembic los detecte
-# y la config para obtener la DATABASE_URL
 from sqlmodel import SQLModel
 
 from app.core.config import settings
-from app.models import *  # noqa: F401, F403 - necesario para registrar todos los modelos
+from app.models import *
 
 config = context.config
 
-# Setear la URL de la DB desde nuestro .env en vez de hardcodearla en alembic.ini
 config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Apuntar al metadata de SQLModel que contiene todos nuestros modelos
 target_metadata = SQLModel.metadata
 
 
