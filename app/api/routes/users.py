@@ -48,7 +48,8 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
     return {
         "id": new_user.id,
         "email": new_user.email,
-        "name": new_user.name
+        "name": new_user.name,
+        "is_active": new_user.is_active,
     }
 
 
