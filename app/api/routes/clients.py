@@ -7,6 +7,8 @@ from sqlmodel import Session, select
 from app.core.db import get_db
 from app.models import Client
 
+# ijfipadihfoishdifhoidshfoihsdoihfoisdhiofhiosdiofhosd
+
 router = APIRouter(prefix="/clients", tags=["clients"])
 
 # Body de la petición para registrar un cliente nuevo
