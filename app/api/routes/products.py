@@ -5,7 +5,8 @@ from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
 from app.core.db import get_db
-from app.models import Category, Product, ProductVariant, OrderDetail
+from app.core.deps import get_current_user, require_admin
+from app.models import Category, Product, ProductVariant, OrderDetail, User
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -127,7 +128,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=ProductPublic, status_code=201)
-def create_product(data: ProductCreate, db: Session = Depends(get_db)):
+def create_product(data: ProductCreate, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     # Verifica que la categoria exista
     category = db.get(Category, data.category_id)
     if not category:
@@ -154,7 +155,7 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db)):
 
 @router.patch("/{product_id}", response_model=ProductPublic)
 def update_product(
-    product_id: int, data: ProductUpdate, db: Session = Depends(get_db)
+    product_id: int, data: ProductUpdate, db: Session = Depends(get_db), _user: User = Depends(get_current_user)
 ):
     # Verifica que el producto exista
     product = db.get(Product, product_id)
@@ -176,7 +177,7 @@ def update_product(
 
 
 @router.delete("/{product_id}", status_code=204)
-def delete_product(product_id: int, db: Session = Depends(get_db)):
+def delete_product(product_id: int, db: Session = Depends(get_db), _user: User = Depends(require_admin)):
     # Verifica que el producto exista
     product = db.get(Product, product_id)
     if not product:
@@ -199,7 +200,7 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     "/{product_id}/variants", response_model=VariantPublic, status_code=201
 )
 def create_variant(
-    product_id: int, data: VariantCreate, db: Session = Depends(get_db)
+    product_id: int, data: VariantCreate, db: Session = Depends(get_db), _user: User = Depends(get_current_user)
 ):
     # Verifica que el producto exista
     product = db.get(Product, product_id)
@@ -221,6 +222,7 @@ def update_variant(
     variant_id: int,
     data: VariantUpdate,
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     # Verifica que la variante exista y que sea del producto correcto 
     variant = db.exec(
@@ -242,7 +244,7 @@ def update_variant(
 
 @router.delete("/{product_id}/variants/{variant_id}", status_code=204)
 def delete_variant(
-    product_id: int, variant_id: int, db: Session = Depends(get_db)
+    product_id: int, variant_id: int, db: Session = Depends(get_db), _user: User = Depends(require_admin)
 ):
     # Verifica que la variante exista y que sea del producto correcto 
     variant = db.exec(

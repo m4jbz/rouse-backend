@@ -3,7 +3,8 @@ from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
 from app.core.db import get_db
-from app.models import Category, Product
+from app.core.deps import get_current_user, require_admin
+from app.models import Category, Product, User
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -51,7 +52,7 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=CategoryPublic, status_code=201)
-def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
+def create_category(data: CategoryCreate, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     # Convierte el modelo a un diccionario y luego a un objeto Category
     # usando ** para pasar los campos como argumentos
     category = Category(**data.model_dump())
@@ -63,7 +64,7 @@ def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
 
 @router.patch("/{category_id}", response_model=CategoryPublic)
 def update_category(
-    category_id: int, data: CategoryUpdate, db: Session = Depends(get_db)
+    category_id: int, data: CategoryUpdate, db: Session = Depends(get_db), _user: User = Depends(get_current_user)
 ):
     # Busca si la categoría existe
     category = db.get(Category, category_id)
@@ -80,7 +81,7 @@ def update_category(
 
 
 @router.delete("/{category_id}", status_code=204)
-def delete_category(category_id: int, db: Session = Depends(get_db)):
+def delete_category(category_id: int, db: Session = Depends(get_db), _user: User = Depends(require_admin)):
     # Busca si la categoría existe
     category = db.get(Category, category_id)
     if not category:
