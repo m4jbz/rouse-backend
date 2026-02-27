@@ -6,8 +6,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session, select
 
 from app.core.db import get_db
-from app.core.security import decode_access_token
-from app.models import Client
+from app.core.security import decode_access_token, decode_admin_access_token
+from app.models import Client, User, Role
 
 bearer_scheme = HTTPBearer()
 
@@ -49,3 +49,54 @@ def get_current_client(
         )
 
     return client
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Extract and validate the current admin user from the Bearer token."""
+    token = credentials.credentials
+    try:
+        payload = decode_admin_access_token(token)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expirado",
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido",
+        )
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido",
+        )
+
+    user = db.exec(
+        select(User).where(User.id == uuid.UUID(user_id))
+    ).first()
+
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario no encontrado",
+        )
+
+    return user
+
+
+def require_admin(
+    user: User = Depends(get_current_user),
+) -> User:
+    """Dependency that requires the current user to have the admin role."""
+    if user.role != Role.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requieren permisos de administrador",
+        )
+    return user
