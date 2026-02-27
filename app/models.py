@@ -39,10 +39,9 @@ def get_datetime_utc() -> datetime:
 
 class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    email: EmailStr = Field(unique=True, index=True, max_length=255)
-    is_active: bool = False
-    name: str = Field(max_length=255)
+    username: str = Field(unique=True, index=True, max_length=100)
     password_hash: str = Field(max_length=255)
+    is_active: bool = True
     role: Role = Field(default=Role.USER)
     created_at: datetime = Field(default_factory=get_datetime_utc)
 
