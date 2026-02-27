@@ -1,25 +1,53 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
 from app.core.db import get_db
-from app.models import Category, Product, ProductVariant
+from app.models import Category, Product, ProductVariant, OrderDetail
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 
-# Body para actualizar variante por producto id
+# Body para crear variante por producto id
 class VariantCreate(BaseModel):
     name: str
     price: Decimal
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Variant name cannot be empty")
+        return v.strip()
+
+    @field_validator("price")
+    @classmethod
+    def price_must_be_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Price must be greater than 0")
+        return v
 
 
 # Body para actualizar variante por producto id
 class VariantUpdate(BaseModel):
     name: str | None = None
     price: Decimal | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("Variant name cannot be empty")
+        return v.strip() if v else v
+
+    @field_validator("price")
+    @classmethod
+    def price_must_be_positive(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v <= 0:
+            raise ValueError("Price must be greater than 0")
+        return v
 
 
 # Body para obtener y listar variantes por producto id
@@ -37,6 +65,13 @@ class ProductCreate(BaseModel):
     is_active: bool = True
     variants: list[VariantCreate] = []
 
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Product name cannot be empty")
+        return v.strip()
+
 
 # Body para las peticiones PATCH
 class ProductUpdate(BaseModel):
@@ -44,6 +79,13 @@ class ProductUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("Product name cannot be empty")
+        return v.strip() if v else v
 
 
 # Body para listar y obtener los productos
@@ -61,9 +103,12 @@ def list_products(
     active_only: bool = True,
     db: Session = Depends(get_db),
 ):
-    # Verifica que la categoria exista
     query = select(Product)
     if category_id is not None:
+        # Verifica que la categoría exista
+        category = db.get(Category, category_id)
+        if not category:
+            raise HTTPException(status_code=404, detail="Category not found")
         query = query.where(Product.category_id == category_id)
     # Devuelve solo productos activos
     if active_only:
@@ -136,6 +181,17 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     product = db.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    # No se puede eliminar un producto que tenga detalles de orden asociados
+    order_detail = db.exec(
+        select(OrderDetail).where(OrderDetail.product_id == product_id)
+    ).first()
+    if order_detail:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete product with associated orders",
+        )
+
     db.delete(product)
     db.commit()
 

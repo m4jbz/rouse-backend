@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
 from app.core.db import get_db
-from app.models import Category
+from app.models import Category, Product
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -12,9 +12,23 @@ class CategoryCreate(BaseModel):
     name: str
     description: str | None = None
 
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Category name cannot be empty")
+        return v.strip()
+
 class CategoryUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("Category name cannot be empty")
+        return v.strip() if v else v
 
 # Body de las peticiones para listar y obtener categorías
 class CategoryPublic(BaseModel):
@@ -71,5 +85,16 @@ def delete_category(category_id: int, db: Session = Depends(get_db)):
     category = db.get(Category, category_id)
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
+
+    # No se puede eliminar una categoría que tenga productos asociados
+    products = db.exec(
+        select(Product).where(Product.category_id == category_id)
+    ).first()
+    if products:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete category with associated products",
+        )
+
     db.delete(category)
     db.commit()

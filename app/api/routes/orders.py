@@ -2,17 +2,19 @@ import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
 from app.core.db import get_db
 from app.models import (
+    Client,
     Order,
     OrderDetail,
     OrderStatus,
     PaymentMethod,
     PaymentStatus,
     Product,
+    ProductVariant,
 )
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -23,6 +25,27 @@ class OrderDetailCreate(BaseModel):
     variant_name: str
     quantity: int
     unit_price: Decimal
+
+    @field_validator("variant_name")
+    @classmethod
+    def variant_name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Variant name cannot be empty")
+        return v.strip()
+
+    @field_validator("quantity")
+    @classmethod
+    def quantity_must_be_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("Quantity must be greater than 0")
+        return v
+
+    @field_validator("unit_price")
+    @classmethod
+    def unit_price_must_be_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("Unit price must be greater than 0")
+        return v
 
 
 class OrderDetailPublic(BaseModel):
@@ -44,8 +67,30 @@ class OrderCreate(BaseModel):
     notes: str | None = None
     details: list[OrderDetailCreate]
 
+    @field_validator("client_name")
+    @classmethod
+    def client_name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Client name cannot be empty")
+        return v.strip()
+
+    @field_validator("phone")
+    @classmethod
+    def phone_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Phone cannot be empty")
+        return v.strip()
+
+    @field_validator("delivery_address")
+    @classmethod
+    def delivery_address_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Delivery address cannot be empty")
+        return v.strip()
+
 
 class OrderUpdate(BaseModel):
+    status: OrderStatus | None = None
     payment_status: PaymentStatus | None = None
     notes: str | None = None
 
@@ -105,7 +150,16 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
             status_code=400, detail="Order must have at least one detail"
         )
 
-    # Verifica que todos los productos existan
+    # Verifica que el client_id exista si fue proporcionado
+    if data.client_id is not None:
+        client = db.get(Client, data.client_id)
+        if not client:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Client {data.client_id} not found",
+            )
+
+    # Verifica que todos los productos existan y estén activos
     product_ids = {d.product_id for d in data.details}
     for pid in product_ids:
         product = db.get(Product, pid)
@@ -116,6 +170,28 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
         if not product.is_active:
             raise HTTPException(
                 status_code=400, detail=f"Product {pid} is not active"
+            )
+
+    # Verifica que cada variante exista para su producto y que el unit_price coincida
+    for d in data.details:
+        variant = db.exec(
+            select(ProductVariant).where(
+                ProductVariant.product_id == d.product_id,
+                ProductVariant.name == d.variant_name,
+            )
+        ).first()
+        if not variant:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Variant '{d.variant_name}' not found for product {d.product_id}",
+            )
+        if variant.price != d.unit_price:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unit price {d.unit_price} does not match variant "
+                    f"'{d.variant_name}' price {variant.price} for product {d.product_id}"
+                ),
             )
 
     # Genera numero de ticket
@@ -153,6 +229,17 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
     return order
 
 
+# Transiciones de estado válidas para las órdenes
+VALID_STATUS_TRANSITIONS: dict[OrderStatus, list[OrderStatus]] = {
+    OrderStatus.PENDING: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+    OrderStatus.CONFIRMED: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+    OrderStatus.PREPARING: [OrderStatus.DELIVERING, OrderStatus.CANCELLED],
+    OrderStatus.DELIVERING: [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+    OrderStatus.DELIVERED: [],
+    OrderStatus.CANCELLED: [],
+}
+
+
 @router.patch("/{order_id}", response_model=OrderPublic)
 def update_order(
     order_id: int, data: OrderUpdate, db: Session = Depends(get_db)
@@ -161,6 +248,18 @@ def update_order(
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    # Valida que la transición de estado sea coherente
+    if data.status is not None:
+        allowed = VALID_STATUS_TRANSITIONS.get(order.status, [])
+        if data.status not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Cannot transition from '{order.status}' to '{data.status}'. "
+                    f"Allowed transitions: {[s.value for s in allowed] if allowed else 'none'}"
+                ),
+            )
 
     update_data = data.model_dump(exclude_unset=True)
     order.sqlmodel_update(update_data)

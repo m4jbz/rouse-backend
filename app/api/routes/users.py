@@ -1,6 +1,6 @@
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from sqlmodel import Session, select
 
 from app.core.db import get_db
@@ -14,6 +14,20 @@ class RegisterUser(BaseModel):
     password: str
     name: str
     role: Role
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Name cannot be empty")
+        return v.strip()
+
+    @field_validator("password")
+    @classmethod
+    def password_not_empty(cls, v: str) -> str:
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters long")
+        return v
 
 
 # Body de la petición para login de usuario
