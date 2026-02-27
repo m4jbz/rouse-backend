@@ -25,7 +25,6 @@ class OrderStatus(StrEnum):
 class PaymentStatus(StrEnum):
     PENDING = "pendiente"
     PAID = "pagado"
-    REFUNDED = "reembolsado"
 
 
 class PaymentMethod(StrEnum):
@@ -120,3 +119,19 @@ class OrderDetail(SQLModel, table=True):
 
     order: Order = Relationship(back_populates="details")
     product: Product = Relationship()
+
+
+class OrderAudit(SQLModel, table=True):
+    __tablename__ = "order_audit"
+
+    id: int | None = Field(default=None, primary_key=True)
+    order_id: int = Field(index=True)
+    action: str = Field(max_length=10)
+    old_status: str | None = Field(default=None, max_length=50)
+    new_status: str | None = Field(default=None, max_length=50)
+    old_payment_status: str | None = Field(default=None, max_length=50)
+    new_payment_status: str | None = Field(default=None, max_length=50)
+    old_total: Decimal | None = Field(default=None, max_digits=10, decimal_places=2)
+    new_total: Decimal | None = Field(default=None, max_digits=10, decimal_places=2)
+    changed_at: datetime = Field(default_factory=get_datetime_utc)
+    changed_by: str = Field(default="", max_length=100)
