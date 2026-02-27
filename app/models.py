@@ -53,9 +53,28 @@ class Client(SQLModel, table=True):
     name: str = Field(max_length=255)
     phone: PhoneNumber = Field(max_length=20)
     password_hash: str = Field(max_length=255)
+    is_verified: bool = Field(default=False)
     created_at: datetime = Field(default_factory=get_datetime_utc)
 
     orders: list["Order"] = Relationship(back_populates="client")
+    cart_items: list["ClientCartItem"] = Relationship(back_populates="client", cascade_delete=True)
+
+
+class ClientCartItem(SQLModel, table=True):
+    """Persisted cart item for an authenticated client."""
+    __tablename__ = "client_cart_item"
+
+    id: int | None = Field(default=None, primary_key=True)
+    client_id: uuid.UUID = Field(foreign_key="client.id", index=True)
+    product_id: str = Field(max_length=200)
+    product_name: str = Field(max_length=200)
+    product_price: float
+    product_image: str = Field(max_length=500)
+    product_badge: str | None = Field(default=None, max_length=100)
+    quantity: int = Field(default=1, gt=0)
+
+    client: Client = Relationship(back_populates="cart_items")
+
 
 class Category(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)

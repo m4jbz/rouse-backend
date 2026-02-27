@@ -9,5 +9,24 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
 
+    # JWT
+    JWT_SECRET: str
+    JWT_REFRESH_SECRET: str
+    JWT_EMAIL_SECRET: str
+    JWT_EMAIL_REFRESH_SECRET: str
+
+    # Resend
+    RESEND_API_KEY: str
+    EMAIL_FROM: str
+
+    # Frontend
+    FRONTEND_HOST: str
+
+    # Token expiration (minutes)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    EMAIL_TOKEN_EXPIRE_MINUTES: int = 60
+    RESET_TOKEN_EXPIRE_MINUTES: int = 30
+
 
 settings = Settings()

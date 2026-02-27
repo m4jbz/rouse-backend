@@ -5,3 +5,5 @@ psycopg2-binary
 bcrypt
 pydantic-extra-types[phonenumbers]
 alembic
+PyJWT
+resend
