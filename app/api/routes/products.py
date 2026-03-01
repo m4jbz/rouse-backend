@@ -56,6 +56,7 @@ class VariantPublic(BaseModel):
     id: int
     name: str
     price: Decimal
+    image_path: str
 
 
 # Body para las peticiones POST
@@ -118,6 +119,25 @@ def list_products(
     return products
 
 
+@router.get("/products_with_variants", response_model=list[VariantPublic])
+def list_products_with_variants(
+    category_id: int | None = None,
+    active_only: bool = True,
+    db: Session = Depends(get_db),
+):
+    query = select(ProductVariant).join(Product)
+    if category_id is not None:
+        # Verifica que la categoría exista
+        category = db.get(Category, category_id)
+        if not category:
+            raise HTTPException(status_code=404, detail="Category not found")
+        query = query.where(Product.category_id == category_id)
+    # Devuelve solo productos activos
+    if active_only:
+        query = query.where(Product.is_active == True)
+    variants = db.exec(query).all()
+    return variants
+
 @router.get("/{product_id}", response_model=ProductPublic)
 def get_product(product_id: int, db: Session = Depends(get_db)):
     # Verifica que el producto exista
@@ -125,6 +145,14 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     return product
+
+@router.get("/{product_id}/variants", response_model=list[VariantPublic])
+def list_variants(product_id: int, db: Session = Depends(get_db)):
+    # Verifica que el producto exista
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product.variants
 
 
 @router.post("/", response_model=ProductPublic, status_code=201)

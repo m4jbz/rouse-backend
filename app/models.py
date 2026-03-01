@@ -101,6 +101,7 @@ class ProductVariant(SQLModel, table=True):
     product_id: int = Field(foreign_key="product.id", index=True)
     name: str = Field(max_length=100)
     price: Decimal = Field(max_digits=10, decimal_places=2)
+    image_path: str | None = Field(default=None, max_length=500)
     created_at: datetime = Field(default_factory=get_datetime_utc)
 
     product: Product = Relationship(back_populates="variants")
