@@ -190,7 +190,6 @@ def verify_email(token: str, db: Session = Depends(get_db)):
 
 @router.post("/resend-verification")
 def resend_verification(data: ResendVerificationRequest, db: Session = Depends(get_db)):
-    """Resend the verification email if the client hasn't verified yet."""
     client = db.exec(
         select(Client).where(Client.email == data.email)
     ).first()
@@ -207,22 +206,21 @@ def resend_verification(data: ResendVerificationRequest, db: Session = Depends(g
 
 @router.post("/forgot-password")
 def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    """Send a password reset email. Always returns success to avoid email enumeration."""
     client = db.exec(
         select(Client).where(Client.email == data.email)
     ).first()
 
-    # Always return the same message regardless of whether the email exists
-    if client:
-        token = create_password_reset_token(client.id)
-        send_password_reset_email(str(client.email), client.name, token)
+    if not client:
+        raise HTTPException(status_code=400, detail="No existe una cuenta registrada con este correo")
+
+    token = create_password_reset_token(client.id)
+    send_password_reset_email(str(client.email), client.name, token)
 
     return {"message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."}
 
 
 @router.post("/reset-password")
 def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
-    """Reset the client's password using the token from the email link."""
     try:
         payload = decode_password_reset_token(data.token)
     except jwt.ExpiredSignatureError:
