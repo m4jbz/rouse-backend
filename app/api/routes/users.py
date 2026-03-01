@@ -13,6 +13,8 @@ from app.core.security import (
     decode_admin_refresh_token,
 )
 from app.models import User
+from pyrate_limiter import Duration, Limiter, Rate
+from fastapi_limiter.depends import RateLimiter
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -49,11 +51,13 @@ class UserPublic(BaseModel):
     role: str
     is_active: bool
 
+def default_callback(*args, **kwargs):
+    raise HTTPException(status_code=429, detail="Muchas solicitudes. Por favor, inténtalo de nuevo más tarde.")
 
 # ---- Endpoints ----
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(RateLimiter(limiter=Limiter(Rate(3, Duration.MINUTE * 60)), callback=default_callback))])
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.exec(select(User).where(User.username == data.username)).first()
     if not user:

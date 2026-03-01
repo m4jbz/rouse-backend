@@ -82,7 +82,6 @@ class ResendVerificationRequest(BaseModel):
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(client: RegisterClient, db: Session = Depends(get_db)):
-    """Register a new client. Sends a verification email."""
     # Check for duplicate email
     existing = db.exec(
         select(Client).where(Client.email == client.email)

@@ -8,3 +8,4 @@ alembic
 PyJWT
 resend
 pydantic-settings
+fastapi-limiter
