@@ -7,3 +7,4 @@ pydantic-extra-types[phonenumbers]
 alembic
 PyJWT
 resend
+pydantic-settings

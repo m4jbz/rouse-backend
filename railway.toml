@@ -1,0 +1,2 @@
+[deploy]
+releaseCommand = "alembic upgrade head"
