@@ -17,7 +17,8 @@ class Settings(BaseSettings):
 
     # Resend
     RESEND_API_KEY: str
-    EMAIL_FROM: str
+    VERIFY_EMAIL: str
+    RESET_PASSWORD_EMAIL: str
 
     # Frontend
     FRONTEND_HOST: str

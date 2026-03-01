@@ -19,7 +19,7 @@ def send_verification_email(to_email: str, name: str, token: str) -> bool:
     try:
         resend.Emails.send(
             {
-                "from": settings.EMAIL_FROM,
+                "from": settings.VERIFY_EMAIL,
                 "to": [to_email],
                 "subject": "Verifica tu cuenta - Pastelería Rouse",
                 "html": f"""
@@ -74,7 +74,7 @@ def send_password_reset_email(to_email: str, name: str, token: str) -> bool:
     try:
         resend.Emails.send(
             {
-                "from": settings.EMAIL_FROM,
+                "from": settings.RESET_PASSWORD_EMAIL,
                 "to": [to_email],
                 "subject": "Restablecer contraseña - Pastelería Rouse",
                 "html": f"""
