@@ -10,10 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 def send_verification_email(to_email: str, name: str, token: str) -> bool:
-    """Send an email verification link to the client.
-
-    Returns True if the email was sent successfully, False otherwise.
-    """
+    # Envía un correo de verificación al cliente.
+    # Devuelve True si el correo se envió correctamente, False en caso contrario.
     verification_url = f"{settings.FRONTEND_HOST}/verify-email?token={token}"
 
     try:
@@ -60,15 +58,13 @@ def send_verification_email(to_email: str, name: str, token: str) -> bool:
         )
         return True
     except Exception as e:
-        logger.error("Failed to send verification email to %s: %s", to_email, e)
+        logger.error("Hubo un error al enviar el correo de verificación a %s: %s", to_email, e)
         return False
 
 
 def send_password_reset_email(to_email: str, name: str, token: str) -> bool:
-    """Send a password reset link to the client.
-
-    Returns True if the email was sent successfully, False otherwise.
-    """
+    # Envía un correo de restablecimiento de contraseña al cliente.
+    # Devuelve True si el correo se envió correctamente, False en caso contrario.
     reset_url = f"{settings.FRONTEND_HOST}/reset-password?token={token}"
 
     try:
@@ -115,5 +111,5 @@ def send_password_reset_email(to_email: str, name: str, token: str) -> bool:
         )
         return True
     except Exception as e:
-        logger.error("Failed to send password reset email to %s: %s", to_email, e)
+        logger.error("Hubo un error al enviar el correo de restablecimiento de contraseña a %s: %s", to_email, e)
         return False

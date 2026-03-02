@@ -16,7 +16,7 @@ def get_current_client(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> Client:
-    """FastAPI dependency that extracts and validates the current client from the Bearer token."""
+    # Extrae y valida el cliente actual del token Bearer.
     token = credentials.credentials
     try:
         payload = decode_access_token(token)
@@ -55,7 +55,7 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """Extract and validate the current admin user from the Bearer token."""
+    # Extrae y valida el usuario actual del token Bearer.
     token = credentials.credentials
     try:
         payload = decode_admin_access_token(token)
@@ -93,7 +93,7 @@ def get_current_user(
 def require_admin(
     user: User = Depends(get_current_user),
 ) -> User:
-    """Dependency that requires the current user to have the admin role."""
+    # Verifica que el usuario tenga permisos de administrador.
     if user.role != Role.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

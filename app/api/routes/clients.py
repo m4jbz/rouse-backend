@@ -124,7 +124,7 @@ def register(client: RegisterClient, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(data: LoginClient, db: Session = Depends(get_db)):
-    """Login a client. Returns access and refresh tokens."""
+    # Loguea al cliente verificando su email y contraseña. Devuelve un token de acceso y refresh token.
     client = db.exec(
         select(Client).where(Client.email == data.email)
     ).first()
@@ -162,7 +162,7 @@ def login(data: LoginClient, db: Session = Depends(get_db)):
 
 @router.get("/verify-email")
 def verify_email(token: str, db: Session = Depends(get_db)):
-    """Verify the client's email address using the token from the email link."""
+    # Verifica el correo del cliente usando el token enviado por email. Si el token es válido, marca la cuenta como verificada.
     try:
         payload = decode_email_verification_token(token)
     except jwt.ExpiredSignatureError:
@@ -249,7 +249,7 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
 
 @router.post("/refresh")
 def refresh_token(data: RefreshTokenRequest, db: Session = Depends(get_db)):
-    """Get a new access token using a valid refresh token."""
+    # Obtiene un nuevo token de acceso usando un refresh token válido.
     try:
         payload = decode_refresh_token(data.refresh_token)
     except jwt.ExpiredSignatureError:
@@ -275,7 +275,7 @@ def refresh_token(data: RefreshTokenRequest, db: Session = Depends(get_db)):
 
 @router.get("/me")
 def get_me(client: Client = Depends(get_current_client)):
-    """Get the current authenticated client's profile."""
+    # Devuelve la información del cliente autenticado.
     return {
         "id": str(client.id),
         "email": str(client.email),
@@ -309,7 +309,7 @@ def get_cart(
     client: Client = Depends(get_current_client),
     db: Session = Depends(get_db),
 ):
-    """Get the authenticated client's saved cart."""
+    # Devuelve los items del carrito guardados en el servidor para el cliente autenticado.
     rows = db.exec(
         select(ClientCartItem).where(ClientCartItem.client_id == client.id)
     ).all()
@@ -335,15 +335,14 @@ def sync_cart(
     client: Client = Depends(get_current_client),
     db: Session = Depends(get_db),
 ):
-    """Replace the client's entire cart with the provided items."""
-    # Delete existing cart items
+    # Borra los items del carrito guardados en el servidor para el cliente autenticado y los reemplaza por los enviados en la petición.
     existing = db.exec(
         select(ClientCartItem).where(ClientCartItem.client_id == client.id)
     ).all()
     for item in existing:
         db.delete(item)
 
-    # Insert new items
+    # Agrega los nuevos items del carrito
     for item_data in data.items:
         cart_item = ClientCartItem(
             client_id=client.id,
@@ -365,7 +364,7 @@ def clear_server_cart(
     client: Client = Depends(get_current_client),
     db: Session = Depends(get_db),
 ):
-    """Clear the client's saved cart."""
+    # Borra los items del carrito guardados en el servidor para el cliente autenticado.
     existing = db.exec(
         select(ClientCartItem).where(ClientCartItem.client_id == client.id)
     ).all()

@@ -33,6 +33,13 @@ class LoginRequest(BaseModel):
             raise ValueError("Username cannot be empty")
         return v.strip()
 
+    @field_validator("password")
+    @classmethod
+    def password_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Password cannot be empty")
+        return v.strip()
+
 
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -52,12 +59,12 @@ class UserPublic(BaseModel):
     is_active: bool
 
 def default_callback(*args, **kwargs):
-    raise HTTPException(status_code=429, detail="Muchas solicitudes. Por favor, inténtalo de nuevo más tarde.")
+    raise HTTPException(status_code=429, detail="Muchas solicitudes. Por favor, inténtalo de nuevo en 10 minutos.")
 
 # ---- Endpoints ----
 
 
-@router.post("/login", dependencies=[Depends(RateLimiter(limiter=Limiter(Rate(3, Duration.MINUTE * 60)), callback=default_callback))])
+@router.post("/login", dependencies=[Depends(RateLimiter(limiter=Limiter(Rate(3, Duration.MINUTE * 10)), callback=default_callback))])
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.exec(select(User).where(User.username == data.username)).first()
     if not user:
