@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     JWT_REFRESH_SECRET: str
     JWT_EMAIL_SECRET: str
     JWT_EMAIL_REFRESH_SECRET: str
+    JWT_PASSWORD_RESET_SECRET: str
 
     # Resend
     RESEND_API_KEY: str
@@ -23,7 +24,7 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_HOST: str
 
-    # Token expiration (minutes)
+    # Token expiracion (minutos)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     EMAIL_TOKEN_EXPIRE_MINUTES: int = 60
