@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -119,6 +120,7 @@ class OrderPublic(BaseModel):
     payment_status: PaymentStatus
     notes: str | None
     total: Decimal
+    created_at: datetime
     details: list[OrderDetailPublic] = []
 
 # Genera el número de ticket basado en el último ID de órden en la base de datos
@@ -296,6 +298,12 @@ def update_order(
                     f"Cannot transition from '{order.status}' to '{data.status}'. "
                     f"Allowed transitions: {[s.value for s in allowed] if allowed else 'none'}"
                 ),
+            )
+        # No se puede cancelar una órden que ya fue pagada
+        if data.status == OrderStatus.CANCELLED and order.payment_status == PaymentStatus.PAID:
+            raise HTTPException(
+                status_code=400,
+                detail="No se puede cancelar una orden que ya fue pagada",
             )
 
     update_data = data.model_dump(exclude_unset=True)
