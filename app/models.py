@@ -10,10 +10,16 @@ from sqlmodel import Field, Relationship, SQLModel
 
 
 def _sa_enum(enum_cls: type, name: str) -> sa.Enum:
-    """Force SQLAlchemy to use enum .value (not .name) for PostgreSQL."""
+    """Build a string-only SA Enum that matches the existing PG type.
+
+    We intentionally do NOT pass the Python enum class to sa.Enum.
+    This avoids a SQLAlchemy bug on Python 3.13 where it maps values
+    through the enum member NAME (e.g. 'PENDING') instead of VALUE
+    (e.g. 'pendiente'), both when writing AND reading rows.
+    Pydantic / SQLModel handles str ↔ StrEnum conversion automatically.
+    """
     return sa.Enum(
-        enum_cls,
-        values_callable=lambda x: [e.value for e in x],
+        *[e.value for e in enum_cls],
         name=name,
         create_type=False,
     )
