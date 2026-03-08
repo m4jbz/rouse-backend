@@ -1,11 +1,14 @@
 import uuid
 from decimal import Decimal
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
 from app.core.db import get_db
+from app.core.deps import get_current_client, get_current_user
 from app.models import (
     Client,
     Order,
@@ -15,9 +18,11 @@ from app.models import (
     PaymentStatus,
     Product,
     ProductVariant,
+    User,
 )
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+bearer_scheme = HTTPBearer(auto_error=False)
 
 # Estos dos schemas son necesarios para la relación de Orders con OrderDetails
 class OrderDetailCreate(BaseModel):
@@ -62,7 +67,7 @@ class OrderCreate(BaseModel):
     client_id: uuid.UUID | None = None
     client_name: str
     phone: str
-    delivery_address: str
+    delivery_address: str | None = None
     payment_method: PaymentMethod
     notes: str | None = None
     details: list[OrderDetailCreate]
@@ -79,14 +84,21 @@ class OrderCreate(BaseModel):
     def phone_not_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("Phone cannot be empty")
-        return v.strip()
+        # Strip everything non-digit: "tel:+52-733-136-1624" → "527331361624"
+        digits = "".join(c for c in v if c.isdigit())
+        # Strip Mexico country code prefix
+        if digits.startswith("52") and len(digits) == 12:
+            digits = digits[2:]
+        if not digits:
+            raise ValueError("Phone must contain digits")
+        return digits
 
     @field_validator("delivery_address")
     @classmethod
-    def delivery_address_not_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("Delivery address cannot be empty")
-        return v.strip()
+    def delivery_address_normalize(cls, v: str | None) -> str | None:
+        if v is not None and v.strip():
+            return v.strip()
+        return None
 
 
 class OrderUpdate(BaseModel):
@@ -101,7 +113,7 @@ class OrderPublic(BaseModel):
     client_id: uuid.UUID | None
     client_name: str
     phone: str
-    delivery_address: str
+    delivery_address: str | None
     status: OrderStatus
     payment_method: PaymentMethod
     payment_status: PaymentStatus
@@ -115,11 +127,27 @@ def _generate_ticket(db: Session) -> str:
     next_num = (last.id + 1) if last else 1
     return f"TK-{next_num:04d}"
 
+@router.get("/my-orders", response_model=list[OrderPublic])
+def list_my_orders(
+    client: Client = Depends(get_current_client),
+    db: Session = Depends(get_db),
+):
+    """Lista las órdenes del cliente autenticado."""
+    query = (
+        select(Order)
+        .where(Order.client_id == client.id)
+        .order_by(Order.id.desc())
+    )
+    orders = db.exec(query).all()
+    return orders
+
+
 @router.get("/", response_model=list[OrderPublic])
 def list_orders(
     status: OrderStatus | None = None,
     payment_status: PaymentStatus | None = None,
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     # Busqueda y ordenamiento por id
     query = select(Order).order_by(Order.id.desc())
@@ -134,7 +162,7 @@ def list_orders(
 
 
 @router.get("/{order_id}", response_model=OrderPublic)
-def get_order(order_id: int, db: Session = Depends(get_db)):
+def get_order(order_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     order = db.get(Order, order_id)
     # Si no se encuentra la órden se devuelve un error 404
     if not order:
@@ -197,33 +225,41 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
     # Genera numero de ticket
     ticket = _generate_ticket(db)
 
+    # Calcula subtotales y total en Python (sin stored procedure)
+    order_total = Decimal("0")
+    detail_objects: list[OrderDetail] = []
+    for d in data.details:
+        subtotal = d.unit_price * d.quantity
+        order_total += subtotal
+        detail_objects.append(
+            OrderDetail(
+                order_id=0,  # se asigna después del flush
+                product_id=d.product_id,
+                variant_name=d.variant_name,
+                quantity=d.quantity,
+                unit_price=d.unit_price,
+                subtotal=subtotal,
+            )
+        )
+
     order = Order(
         ticket_number=ticket,
         client_id=data.client_id,
         client_name=data.client_name,
         phone=data.phone,
-        delivery_address=data.delivery_address,
+        delivery_address=data.delivery_address or "Recoger en tienda",
         payment_method=data.payment_method,
         notes=data.notes,
-        total=Decimal("0"),
+        total=order_total,
     )
     db.add(order)
     db.flush()
 
-    # Flush permite obtener el ID de la órden sin hacer commit todavía,
-    # lo cual es necesario para crear los detalles de la órden con el order_id correcto
-    for d in data.details:
-        detail = OrderDetail(
-            order_id=order.id,
-            product_id=d.product_id,
-            variant_name=d.variant_name,
-            quantity=d.quantity,
-            unit_price=d.unit_price,
-            subtotal=Decimal("0"),
-        )
+    # Flush permite obtener el ID de la órden sin hacer commit todavía
+    for detail in detail_objects:
+        detail.order_id = order.id
         db.add(detail)
 
-    # Una vez completado lo anterior ahora si puede completar la query
     db.commit()
     db.refresh(order)
     return order
@@ -242,7 +278,8 @@ VALID_STATUS_TRANSITIONS: dict[OrderStatus, list[OrderStatus]] = {
 
 @router.patch("/{order_id}", response_model=OrderPublic)
 def update_order(
-    order_id: int, data: OrderUpdate, db: Session = Depends(get_db)
+    order_id: int, data: OrderUpdate, db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     # Busca si la órden existe
     order = db.get(Order, order_id)
@@ -270,7 +307,7 @@ def update_order(
 
 
 @router.delete("/{order_id}", status_code=204)
-def delete_order(order_id: int, db: Session = Depends(get_db)):
+def delete_order(order_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     # Busca si la órden existe
     order = db.get(Order, order_id)
     if not order:
