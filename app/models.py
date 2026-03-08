@@ -3,9 +3,20 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
 
+import sqlalchemy as sa
 from pydantic import EmailStr
 from pydantic_extra_types.phone_numbers import PhoneNumber
 from sqlmodel import Field, Relationship, SQLModel
+
+
+def _sa_enum(enum_cls: type, name: str) -> sa.Enum:
+    """Force SQLAlchemy to use enum .value (not .name) for PostgreSQL."""
+    return sa.Enum(
+        enum_cls,
+        values_callable=lambda x: [e.value for e in x],
+        name=name,
+        create_type=False,
+    )
 
 
 class Role(StrEnum):
@@ -42,7 +53,7 @@ class User(SQLModel, table=True):
     username: str = Field(unique=True, index=True, max_length=100)
     password_hash: str = Field(max_length=255)
     is_active: bool = True
-    role: Role = Field(default=Role.USER)
+    role: Role = Field(default=Role.USER, sa_type=_sa_enum(Role, "role"))
     created_at: datetime = Field(default_factory=get_datetime_utc)
 
 
@@ -115,9 +126,9 @@ class Order(SQLModel, table=True):
     client_name: str = Field(max_length=150)
     phone: str = Field(max_length=20)
     delivery_address: str
-    status: OrderStatus = Field(default=OrderStatus.PENDING, index=True)
-    payment_method: PaymentMethod
-    payment_status: PaymentStatus = Field(default=PaymentStatus.PENDING)
+    status: OrderStatus = Field(default=OrderStatus.PENDING, index=True, sa_type=_sa_enum(OrderStatus, "orderstatus"))
+    payment_method: PaymentMethod = Field(sa_type=_sa_enum(PaymentMethod, "paymentmethod"))
+    payment_status: PaymentStatus = Field(default=PaymentStatus.PENDING, sa_type=_sa_enum(PaymentStatus, "paymentstatus"))
     notes: str | None = Field(default=None)
     total: Decimal = Field(max_digits=10, decimal_places=2)
     created_at: datetime = Field(default_factory=get_datetime_utc)
