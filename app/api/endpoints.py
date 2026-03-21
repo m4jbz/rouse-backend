@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import users, clients, categories, orders, products
 
+# Añade todas las rutas o todos los endpoints
 api_router = APIRouter()
 api_router.include_router(users.router)
 api_router.include_router(clients.router)

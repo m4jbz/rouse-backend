@@ -9,14 +9,16 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# App principal
 app = FastAPI()
 
+# URL del frontend para usarse en el CORS
 origin = settings.FRONTEND_HOST
 
 # Solo permitir solicitudes desde el dominio específico para mejorar la seguridad y evitar problemas de CORS en producción.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin],
+    allow_origins=[*],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,5 +33,5 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Error interno del servidor."},
     )
 
-
+# Incluir todas las rutas o endpoints
 app.include_router(api_router)

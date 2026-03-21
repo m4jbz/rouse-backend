@@ -9,10 +9,11 @@ from sqlmodel import SQLModel
 from app.core.config import settings
 from app.models import *
 
+# Establece la opcion de sqlalchemy.url con la URL del .env
 config = context.config
-
 config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))
 
+# Verifica la existencia de alembic.ini
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

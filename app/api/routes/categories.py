@@ -8,7 +8,7 @@ from app.models import Category, Product, User
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
-# Body de las peticiones post y patch para crear y actualizar categorías
+# Body de las peticiones POST para crear categorías
 class CategoryCreate(BaseModel):
     name: str
     description: str | None = None
@@ -20,6 +20,7 @@ class CategoryCreate(BaseModel):
             raise ValueError("Category name cannot be empty")
         return v.strip()
 
+# Body de las peticiones PATCH para actualizar categorías
 class CategoryUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
@@ -37,12 +38,13 @@ class CategoryPublic(BaseModel):
     name: str
     description: str | None
 
+# Es como un SELECT * FROM categories;
 @router.get("/", response_model=list[CategoryPublic])
 def list_categories(db: Session = Depends(get_db)):
     categories = db.exec(select(Category)).all()
     return categories
 
-
+# Se podría traducir como SELECT * FROM categories WHERE id = category_id;
 @router.get("/{category_id}", response_model=CategoryPublic)
 def get_category(category_id: int, db: Session = Depends(get_db)):
     category = db.get(Category, category_id)

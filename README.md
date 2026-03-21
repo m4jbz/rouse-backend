@@ -45,3 +45,7 @@ fastapi dev app/main.py
 ```
 
 El backend corre en el puerto 8000
+
+## Documentación
+
+Ver la carpeta docs para más información del proyecto.

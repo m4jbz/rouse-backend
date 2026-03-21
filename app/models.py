@@ -9,15 +9,10 @@ from pydantic_extra_types.phone_numbers import PhoneNumber
 from sqlmodel import Field, Relationship, SQLModel
 
 
+# Esta función sirve para evitar errores en la base de datos
+# con los tipos nuevos (enums) del código y de postgres.
+# Mapea el tipo o enum (ej. Role) de python a un enum de SQLAlchemy.
 def _sa_enum(enum_cls: type, name: str) -> sa.Enum:
-    """Build a string-only SA Enum that matches the existing PG type.
-
-    We intentionally do NOT pass the Python enum class to sa.Enum.
-    This avoids a SQLAlchemy bug on Python 3.13 where it maps values
-    through the enum member NAME (e.g. 'PENDING') instead of VALUE
-    (e.g. 'pendiente'), both when writing AND reading rows.
-    Pydantic / SQLModel handles str ↔ StrEnum conversion automatically.
-    """
     return sa.Enum(
         *[e.value for e in enum_cls],
         name=name,
@@ -25,11 +20,13 @@ def _sa_enum(enum_cls: type, name: str) -> sa.Enum:
     )
 
 
+# Posibles roles de los usuarios del sistema, NO los clientes
 class Role(StrEnum):
     ADMIN = "admin"
     USER = "user"
 
 
+# Posibles estados del pedido
 class OrderStatus(StrEnum):
     PENDING = "pendiente"
     CONFIRMED = "confirmado"
@@ -39,20 +36,25 @@ class OrderStatus(StrEnum):
     CANCELLED = "cancelado"
 
 
+# Posibles estados del pago del pedido
 class PaymentStatus(StrEnum):
     PENDING = "pendiente"
     PAID = "pagado"
 
 
+# Posibles metodos de pago
 class PaymentMethod(StrEnum):
     CASH = "efectivo"
     CARD = "tarjeta"
     TRANSFER = "transferencia"
 
 
+# Función para obtener la fecha y hora actual
 def get_datetime_utc() -> datetime:
     return datetime.now(timezone.utc)
 
+
+# ========= Tablas =========
 
 class User(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -77,7 +79,6 @@ class Client(SQLModel, table=True):
 
 
 class ClientCartItem(SQLModel, table=True):
-    """Persisted cart item for an authenticated client."""
     __tablename__ = "client_cart_item"
 
     id: int | None = Field(default=None, primary_key=True)
@@ -114,6 +115,8 @@ class Product(SQLModel, table=True):
     )
 
 class ProductVariant(SQLModel, table=True):
+    __tablename__ = "product_variant"
+
     id: int | None = Field(default=None, primary_key=True)
     product_id: int = Field(foreign_key="product.id", index=True)
     name: str = Field(max_length=100)
@@ -145,6 +148,8 @@ class Order(SQLModel, table=True):
     )
 
 class OrderDetail(SQLModel, table=True):
+    __tablename__ = "order_detail"
+
     id: int | None = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="order.id", index=True)
     product_id: int = Field(foreign_key="product.id", index=True)
@@ -171,3 +176,4 @@ class OrderAudit(SQLModel, table=True):
     new_total: Decimal | None = Field(default=None, max_digits=10, decimal_places=2)
     changed_at: datetime = Field(default_factory=get_datetime_utc)
     changed_by: str = Field(default="", max_length=100)
+# ==========================
