@@ -18,7 +18,7 @@ origin = settings.FRONTEND_HOST
 # Solo permitir solicitudes desde el dominio específico para mejorar la seguridad y evitar problemas de CORS en producción.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
