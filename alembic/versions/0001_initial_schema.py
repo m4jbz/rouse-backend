@@ -100,7 +100,7 @@ def upgrade() -> None:
     op.create_index("ix_product_category_id", "product", ["category_id"])
 
     op.create_table(
-        "productvariant",
+        "product_variant",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("product_id", sa.Integer(), nullable=False),
         sa.Column("name", sa.String(length=100), nullable=False),
@@ -110,7 +110,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["product_id"], ["product.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_productvariant_product_id", "productvariant", ["product_id"])
+    op.create_index("ix_product_variant_product_id", "product_variant", ["product_id"])
 
     # =================================================================
     # TABLA ORDER (con enums)
@@ -395,7 +395,7 @@ def downgrade() -> None:
     op.drop_table("order_audit")
     op.drop_table("orderdetail")
     op.drop_table("order")
-    op.drop_table("productvariant")
+    op.drop_table("product_variant")
     op.drop_table("product")
     op.drop_table("client_cart_item")
     op.drop_table("category")

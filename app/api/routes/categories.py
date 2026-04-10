@@ -12,6 +12,7 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 class CategoryCreate(BaseModel):
     name: str
     description: str | None = None
+    section: str | None = None  # 'pasteles' | 'postres'
 
     @field_validator("name")
     @classmethod
@@ -20,10 +21,20 @@ class CategoryCreate(BaseModel):
             raise ValueError("Category name cannot be empty")
         return v.strip()
 
+    @field_validator("section")
+    @classmethod
+    def section_valid(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip().lower()
+            if v not in ("pasteles", "postres"):
+                raise ValueError("Section must be 'pasteles' or 'postres'")
+        return v
+
 # Body de las peticiones PATCH para actualizar categorías
 class CategoryUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    section: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -32,16 +43,32 @@ class CategoryUpdate(BaseModel):
             raise ValueError("Category name cannot be empty")
         return v.strip() if v else v
 
+    @field_validator("section")
+    @classmethod
+    def section_valid(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip().lower()
+            if v not in ("pasteles", "postres"):
+                raise ValueError("Section must be 'pasteles' or 'postres'")
+        return v
+
 # Body de las peticiones para listar y obtener categorías
 class CategoryPublic(BaseModel):
     id: int
     name: str
     description: str | None
+    section: str | None
 
 # Es como un SELECT * FROM categories;
 @router.get("/", response_model=list[CategoryPublic])
-def list_categories(db: Session = Depends(get_db)):
-    categories = db.exec(select(Category)).all()
+def list_categories(
+    section: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = select(Category)
+    if section is not None:
+        query = query.where(Category.section == section.lower())
+    categories = db.exec(query).all()
     return categories
 
 # Se podría traducir como SELECT * FROM categories WHERE id = category_id;

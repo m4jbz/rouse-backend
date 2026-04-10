@@ -28,6 +28,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # Estos dos schemas son necesarios para la relación de Orders con OrderDetails
 class OrderDetailCreate(BaseModel):
     product_id: int
+    variant_id: int
     variant_name: str
     quantity: int
     unit_price: Decimal
@@ -207,20 +208,20 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)):
         variant = db.exec(
             select(ProductVariant).where(
                 ProductVariant.product_id == d.product_id,
-                ProductVariant.name == d.variant_name,
+                ProductVariant.id == d.variant_id,
             )
         ).first()
         if not variant:
             raise HTTPException(
                 status_code=404,
-                detail=f"Variant '{d.variant_name}' not found for product {d.product_id}",
+                detail=f"Variant ID {d.variant_id} not found for product {d.product_id}",
             )
         if variant.price != d.unit_price:
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"Unit price {d.unit_price} does not match variant "
-                    f"'{d.variant_name}' price {variant.price} for product {d.product_id}"
+                    f"ID {d.variant_id} price {variant.price} for product {d.product_id}"
                 ),
             )
 

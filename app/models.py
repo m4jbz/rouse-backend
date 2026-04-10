@@ -1,7 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 import sqlalchemy as sa
 from pydantic import EmailStr
@@ -45,8 +46,17 @@ class PaymentStatus(StrEnum):
 # Posibles metodos de pago
 class PaymentMethod(StrEnum):
     CASH = "efectivo"
-    CARD = "tarjeta"
     TRANSFER = "transferencia"
+
+
+# Estados para solicitudes de pastel personalizado
+class CustomCakeRequestStatus(StrEnum):
+    PENDING = "pendiente"
+    QUOTED = "cotizado"
+    ACCEPTED = "aceptado"
+    IN_PROGRESS = "en_proceso"
+    COMPLETED = "completado"
+    CANCELLED = "cancelado"
 
 
 # Función para obtener la fecha y hora actual
@@ -97,6 +107,7 @@ class Category(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(max_length=100)
     description: str | None = Field(default=None)
+    section: str | None = Field(default=None, max_length=50, index=True)  # 'pasteles' | 'postres'
     created_at: datetime = Field(default_factory=get_datetime_utc)
 
     products: list["Product"] = Relationship(back_populates="category")
@@ -120,6 +131,8 @@ class ProductVariant(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     product_id: int = Field(foreign_key="product.id", index=True)
     name: str = Field(max_length=100)
+    size: str | None = Field(default=None, max_length=50)  # 'chico' | 'mediano' | 'grande'
+    flavor: str | None = Field(default=None, max_length=100)
     price: Decimal = Field(max_digits=10, decimal_places=2)
     image_path: str | None = Field(default=None, max_length=500)
     created_at: datetime = Field(default_factory=get_datetime_utc)
@@ -176,4 +189,66 @@ class OrderAudit(SQLModel, table=True):
     new_total: Decimal | None = Field(default=None, max_digits=10, decimal_places=2)
     changed_at: datetime = Field(default_factory=get_datetime_utc)
     changed_by: str = Field(default="", max_length=100)
+
+
+# ========= Cake Options (Predefined) =========
+
+class CakeFlavor(SQLModel, table=True):
+    __tablename__ = "cake_flavor"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=100)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=get_datetime_utc)
+
+
+class CakeFilling(SQLModel, table=True):
+    __tablename__ = "cake_filling"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=100)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=get_datetime_utc)
+
+
+class CakeTopping(SQLModel, table=True):
+    __tablename__ = "cake_topping"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=100)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=get_datetime_utc)
+
+
+# ========= Custom Cake Request =========
+
+class CustomCakeRequest(SQLModel, table=True):
+    __tablename__ = "custom_cake_request"
+
+    id: int | None = Field(default=None, primary_key=True)
+    client_id: uuid.UUID | None = Field(default=None, foreign_key="client.id", index=True)
+    client_name: str = Field(max_length=150)
+    client_email: str = Field(max_length=255)
+    client_phone: str = Field(max_length=20)
+    cake_size: str = Field(max_length=50)  # 'chico' | 'mediano' | 'grande'
+    cake_layers: int = Field(default=1)
+    cake_flavor: str = Field(max_length=100)
+    filling: str | None = Field(default=None, max_length=100)
+    topping: str | None = Field(default=None, max_length=100)
+    custom_text: str | None = Field(default=None, max_length=500)
+    reference_images: list[str] | None = Field(default=None, sa_type=sa.JSON)  # Array of URLs
+    delivery_date: date
+    delivery_time: str | None = Field(default=None, max_length=50)
+    additional_notes: str | None = Field(default=None)
+    status: CustomCakeRequestStatus = Field(
+        default=CustomCakeRequestStatus.PENDING,
+        index=True,
+        sa_type=_sa_enum(CustomCakeRequestStatus, "customcakerequeststatus"),
+    )
+    quoted_price: Decimal | None = Field(default=None, max_digits=10, decimal_places=2)
+    admin_notes: str | None = Field(default=None)
+    created_at: datetime = Field(default_factory=get_datetime_utc)
+    updated_at: datetime = Field(default_factory=get_datetime_utc)
+
+    client: Client | None = Relationship()
 # ==========================

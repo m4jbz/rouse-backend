@@ -10,6 +10,7 @@ from app.core.security import decode_access_token, decode_admin_access_token
 from app.models import Client, User, Role
 
 bearer_scheme = HTTPBearer()
+bearer_scheme_optional = HTTPBearer(auto_error=False)
 
 
 def get_current_client(
@@ -47,6 +48,34 @@ def get_current_client(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Cliente no encontrado",
         )
+
+    return client
+
+
+def get_current_client_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme_optional),
+    db: Session = Depends(get_db),
+) -> Client | None:
+    """
+    Returns the current client if authenticated, otherwise None.
+    Does not raise an error if no token is provided.
+    """
+    if not credentials:
+        return None
+
+    token = credentials.credentials
+    try:
+        payload = decode_access_token(token)
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        return None
+
+    client_id = payload.get("sub")
+    if not client_id:
+        return None
+
+    client = db.exec(
+        select(Client).where(Client.id == uuid.UUID(client_id))
+    ).first()
 
     return client
 

@@ -14,7 +14,10 @@ router = APIRouter(prefix="/products", tags=["products"])
 # Body para crear variante por producto id
 class VariantCreate(BaseModel):
     name: str
+    size: str | None = None  # 'chico' | 'mediano' | 'grande'
+    flavor: str | None = None
     price: Decimal
+    image_path: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -22,6 +25,15 @@ class VariantCreate(BaseModel):
         if not v.strip():
             raise ValueError("Variant name cannot be empty")
         return v.strip()
+
+    @field_validator("size")
+    @classmethod
+    def size_valid(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+        return v
 
     @field_validator("price")
     @classmethod
@@ -34,7 +46,10 @@ class VariantCreate(BaseModel):
 # Body para actualizar variante por producto id
 class VariantUpdate(BaseModel):
     name: str | None = None
+    size: str | None = None
+    flavor: str | None = None
     price: Decimal | None = None
+    image_path: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -42,6 +57,15 @@ class VariantUpdate(BaseModel):
         if v is not None and not v.strip():
             raise ValueError("Variant name cannot be empty")
         return v.strip() if v else v
+
+    @field_validator("size")
+    @classmethod
+    def size_valid(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+        return v
 
     @field_validator("price")
     @classmethod
@@ -55,8 +79,10 @@ class VariantUpdate(BaseModel):
 class VariantPublic(BaseModel):
     id: int
     name: str
+    size: str | None
+    flavor: str | None
     price: Decimal
-    image_path: str
+    image_path: str | None
 
 
 # Body para las peticiones POST
@@ -102,6 +128,7 @@ class ProductPublic(BaseModel):
 @router.get("/", response_model=list[ProductPublic])
 def list_products(
     category_id: int | None = None,
+    section: str | None = None,
     active_only: bool = True,
     db: Session = Depends(get_db),
 ):
@@ -112,6 +139,9 @@ def list_products(
         if not category:
             raise HTTPException(status_code=404, detail="Category not found")
         query = query.where(Product.category_id == category_id)
+    if section is not None:
+        # Filtra por sección de la categoría
+        query = query.join(Category).where(Category.section == section.lower())
     # Devuelve solo productos activos
     if active_only:
         query = query.where(Product.is_active == True)
@@ -173,7 +203,14 @@ def create_product(data: ProductCreate, db: Session = Depends(get_db), _user: Us
 
     # Crea las variantes asociadas al producto
     for v in data.variants:
-        variant = ProductVariant(product_id=product.id, name=v.name, price=v.price)
+        variant = ProductVariant(
+            product_id=product.id, 
+            name=v.name, 
+            price=v.price,
+            size=v.size,
+            flavor=v.flavor,
+            image_path=v.image_path
+        )
         db.add(variant)
 
     db.commit()
