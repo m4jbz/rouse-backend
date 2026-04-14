@@ -289,23 +289,23 @@ def update_order(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    # Valida que la transición de estado sea coherente
-    if data.status is not None:
-        allowed = VALID_STATUS_TRANSITIONS.get(order.status, [])
-        if data.status not in allowed:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Cannot transition from '{order.status}' to '{data.status}'. "
-                    f"Allowed transitions: {[s.value for s in allowed] if allowed else 'none'}"
-                ),
-            )
-        # No se puede cancelar una órden que ya fue pagada
-        if data.status == OrderStatus.CANCELLED and order.payment_status == PaymentStatus.PAID:
-            raise HTTPException(
-                status_code=400,
-                detail="No se puede cancelar una orden que ya fue pagada",
-            )
+    # # Valida que la transición de estado sea coherente
+    # if data.status is not None:
+    #     allowed = VALID_STATUS_TRANSITIONS.get(order.status, [])
+    #     if data.status not in allowed:
+    #         raise HTTPException(
+    #             status_code=400,
+    #             detail=(
+    #                 f"Cannot transition from '{order.status}' to '{data.status}'. "
+    #                 f"Allowed transitions: {[s.value for s in allowed] if allowed else 'none'}"
+    #             ),
+    #         )
+    #     # No se puede cancelar una órden que ya fue pagada
+    #     if data.status == OrderStatus.CANCELLED and order.payment_status == PaymentStatus.PAID:
+    #         raise HTTPException(
+    #             status_code=400,
+    #             detail="No se puede cancelar una orden que ya fue pagada",
+    #         )
 
     update_data = data.model_dump(exclude_unset=True)
     order.sqlmodel_update(update_data)
