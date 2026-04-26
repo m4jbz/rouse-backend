@@ -1,7 +1,7 @@
 import uuid
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
@@ -58,13 +58,60 @@ class UserPublic(BaseModel):
     role: str
     is_active: bool
 
+
+def _get_client_ip(request: Request) -> str:
+    # Behind Railway/reverse proxies, request.client.host is typically the proxy.
+    # Prefer forwarded headers so the limiter key is per real client.
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        # First hop is the originating client.
+        return xff.split(",")[0].strip()
+
+    xri = request.headers.get("X-Real-IP")
+    if xri:
+        return xri.strip()
+
+    forwarded = request.headers.get("Forwarded")
+    if forwarded:
+        # Very small parser: Forwarded: for=1.2.3.4;proto=https;host=...
+        for part in forwarded.split(";"):
+            part = part.strip()
+            if part.lower().startswith("for="):
+                ip = part[4:].strip().strip('"')
+                # Strip IPv6 bracket form: for="[2001:db8::1]"
+                if ip.startswith("[") and ip.endswith("]"):
+                    ip = ip[1:-1]
+                return ip
+
+    if request.client:
+        return request.client.host
+
+    return "unknown"
+
+
+async def admin_login_identifier(request: Request) -> str:
+    ip = _get_client_ip(request)
+    return f"{ip}:admin-login"
+
+
 def default_callback(*args, **kwargs):
     raise HTTPException(status_code=429, detail="Muchas solicitudes. Por favor, inténtalo de nuevo en 10 minutos.")
 
 # ---- Endpoints ----
 
 
-@router.post("/login", dependencies=[Depends(RateLimiter(limiter=Limiter(Rate(3, Duration.MINUTE * 10)), callback=default_callback))])
+@router.post(
+    "/login",
+    dependencies=[
+        Depends(
+            RateLimiter(
+                limiter=Limiter(Rate(3, Duration.MINUTE * 10)),
+                identifier=admin_login_identifier,
+                callback=default_callback,
+            )
+        )
+    ],
+)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.exec(select(User).where(User.username == data.username)).first()
     if not user:
