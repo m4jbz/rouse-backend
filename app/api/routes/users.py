@@ -2,6 +2,7 @@ import uuid
 import ipaddress
 import logging
 import hashlib
+from collections import OrderedDict
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -16,12 +17,57 @@ from app.core.security import (
     decode_admin_refresh_token,
 )
 from app.models import User
-from pyrate_limiter import Duration, Limiter, Rate
+from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate, RateItem
+from pyrate_limiter.abstracts.bucket import BucketFactory
+from pyrate_limiter.clocks import MonotonicClock
 from fastapi_limiter.depends import RateLimiter
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 logger = logging.getLogger(__name__)
+
+
+class PerKeyInMemoryBucketFactory(BucketFactory):
+    """Create a separate in-memory bucket per key.
+
+    pyrate_limiter's default Limiter(Rate(...)) builds a single InMemoryBucket
+    shared across all keys, effectively rate-limiting everyone together.
+    """
+
+    def __init__(self, rates: list[Rate], max_buckets: int = 2048):
+        self._rates = rates
+        self._buckets: "OrderedDict[str, InMemoryBucket]" = OrderedDict()
+        self._max_buckets = max_buckets
+        self._clock = MonotonicClock()
+
+    def wrap_item(self, name: str, weight: int = 1) -> RateItem:
+        return RateItem(name, self._clock.now(), weight=weight)
+
+    def get(self, item: RateItem) -> InMemoryBucket:
+        key = item.name
+        bucket = self._buckets.get(key)
+        if bucket is not None:
+            self._buckets.move_to_end(key)
+            return bucket
+
+        bucket = InMemoryBucket(self._rates)
+        self.schedule_leak(bucket)
+        self._buckets[key] = bucket
+
+        # Best-effort cap to avoid unbounded memory usage if keys explode.
+        if len(self._buckets) > self._max_buckets:
+            _, old_bucket = self._buckets.popitem(last=False)
+            try:
+                self.dispose(old_bucket)
+            except Exception:
+                pass
+
+        return bucket
+
+
+_LOGIN_LIMITER = Limiter(
+    PerKeyInMemoryBucketFactory([Rate(3, Duration.MINUTE * 10)], max_buckets=4096)
+)
 
 
 # ---- Request / response schemas ----
@@ -167,7 +213,7 @@ async def default_callback(request: Request, response: Response):
     dependencies=[
         Depends(
             RateLimiter(
-                limiter=Limiter(Rate(3, Duration.MINUTE * 10)),
+                limiter=_LOGIN_LIMITER,
                 identifier=admin_login_identifier,
                 callback=default_callback,
             )
