@@ -1,6 +1,7 @@
 import uuid
 import ipaddress
 import logging
+import hashlib
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -127,15 +128,22 @@ def _get_client_ip(request: Request) -> str:
 
 async def admin_login_identifier(request: Request) -> str:
     ip = _get_client_ip(request)
-    return f"{ip}:admin-login"
+    ua = (request.headers.get("User-Agent") or "").strip()
+    al = (request.headers.get("Accept-Language") or "").strip()
+    fp = hashlib.sha256(f"{ua}|{al}".encode("utf-8")).hexdigest()[:16]
+    return f"{ip}:{fp}:admin-login"
 
 
 async def default_callback(request: Request, response: Response):
     # Log enough to debug proxy/IP issues without exposing credentials.
     ip = _get_client_ip(request)
+    ua = (request.headers.get("User-Agent") or "").strip()
+    al = (request.headers.get("Accept-Language") or "").strip()
+    fp = hashlib.sha256(f"{ua}|{al}".encode("utf-8")).hexdigest()[:16]
     logger.warning(
-        "Rate limit hit on /users/login ip=%s xff=%s xri=%s cf=%s",
+        "Rate limit hit on /users/login ip=%s fp=%s xff=%s xri=%s cf=%s",
         ip,
+        fp,
         request.headers.get("X-Forwarded-For"),
         request.headers.get("X-Real-IP"),
         request.headers.get("CF-Connecting-IP"),
@@ -147,6 +155,7 @@ async def default_callback(request: Request, response: Response):
             "Retry-After": "600",
             # Helps debug proxy/IP issues from the browser Network tab.
             "X-RateLimit-Client-IP": ip,
+            "X-RateLimit-Client-FP": fp,
         },
     )
 
