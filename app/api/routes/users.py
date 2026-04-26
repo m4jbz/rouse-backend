@@ -1,7 +1,9 @@
 import uuid
+import ipaddress
+import logging
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, field_validator
 from sqlmodel import Session, select
 
@@ -17,6 +19,8 @@ from pyrate_limiter import Duration, Limiter, Rate
 from fastapi_limiter.depends import RateLimiter
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+logger = logging.getLogger(__name__)
 
 
 # ---- Request / response schemas ----
@@ -62,26 +66,58 @@ class UserPublic(BaseModel):
 def _get_client_ip(request: Request) -> str:
     # Behind Railway/reverse proxies, request.client.host is typically the proxy.
     # Prefer forwarded headers so the limiter key is per real client.
+    def _clean_ip(value: str) -> str:
+        v = value.strip().strip('"')
+        # Strip IPv6 bracket form: "[2001:db8::1]"
+        if v.startswith("[") and v.endswith("]"):
+            v = v[1:-1]
+        # Strip optional port (ipv4:port). IPv6 ports are rare here and already bracketed.
+        if ":" in v and v.count(":") == 1 and "]" not in v:
+            v = v.split(":", 1)[0]
+        return v
+
+    def _is_public_ip(value: str) -> bool:
+        try:
+            ip = ipaddress.ip_address(value)
+        except ValueError:
+            return False
+        return ip.is_global
+
+    # Common client-IP headers used by CDNs/proxies.
+    for header in (
+        "CF-Connecting-IP",
+        "True-Client-IP",
+        "Fly-Client-IP",
+        "X-Client-IP",
+        "X-Real-IP",
+    ):
+        v = request.headers.get(header)
+        if v:
+            ip = _clean_ip(v)
+            if ip:
+                return ip
+
     xff = request.headers.get("X-Forwarded-For")
     if xff:
-        # First hop is the originating client.
-        return xff.split(",")[0].strip()
-
-    xri = request.headers.get("X-Real-IP")
-    if xri:
-        return xri.strip()
+        # Prefer the first public IP; fall back to the first entry.
+        parts = [_clean_ip(p) for p in xff.split(",")]
+        parts = [p for p in parts if p]
+        for p in parts:
+            if _is_public_ip(p):
+                return p
+        if parts:
+            return parts[0]
 
     forwarded = request.headers.get("Forwarded")
     if forwarded:
-        # Very small parser: Forwarded: for=1.2.3.4;proto=https;host=...
-        for part in forwarded.split(";"):
-            part = part.strip()
-            if part.lower().startswith("for="):
-                ip = part[4:].strip().strip('"')
-                # Strip IPv6 bracket form: for="[2001:db8::1]"
-                if ip.startswith("[") and ip.endswith("]"):
-                    ip = ip[1:-1]
-                return ip
+        # Forwarded: for=1.2.3.4;proto=https;host=..., for=...
+        for entry in forwarded.split(","):
+            for part in entry.split(";"):
+                part = part.strip()
+                if part.lower().startswith("for="):
+                    ip = _clean_ip(part[4:])
+                    if ip:
+                        return ip
 
     if request.client:
         return request.client.host
@@ -94,8 +130,25 @@ async def admin_login_identifier(request: Request) -> str:
     return f"{ip}:admin-login"
 
 
-def default_callback(*args, **kwargs):
-    raise HTTPException(status_code=429, detail="Muchas solicitudes. Por favor, inténtalo de nuevo en 10 minutos.")
+async def default_callback(request: Request, response: Response):
+    # Log enough to debug proxy/IP issues without exposing credentials.
+    ip = _get_client_ip(request)
+    logger.warning(
+        "Rate limit hit on /users/login ip=%s xff=%s xri=%s cf=%s",
+        ip,
+        request.headers.get("X-Forwarded-For"),
+        request.headers.get("X-Real-IP"),
+        request.headers.get("CF-Connecting-IP"),
+    )
+    raise HTTPException(
+        status_code=429,
+        detail="Muchas solicitudes. Por favor, inténtalo de nuevo en 10 minutos.",
+        headers={
+            "Retry-After": "600",
+            # Helps debug proxy/IP issues from the browser Network tab.
+            "X-RateLimit-Client-IP": ip,
+        },
+    )
 
 # ---- Endpoints ----
 
